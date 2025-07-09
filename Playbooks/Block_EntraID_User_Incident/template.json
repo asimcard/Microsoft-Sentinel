@@ -1,0 +1,243 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_Block_EntraID_User_Incident_name": {
+            "defaultValue": "Block_EntraID_User_Incident",
+            "type": "String"
+        },
+        "connections_microsoftsentinel_Block_EntraID_User_Incident_externalid": {
+            "defaultValue": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/microsoftsentinel-Block_EntraID_User_Incident",
+            "type": "String"
+        },
+        "connections_office365_3_externalid": {
+            "defaultValue": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_Block_EntraID_User_Incident_name')]",
+            "location": "eastus",
+            "tags": {
+                "LogicAppsCategory": "security",
+                "hidden-SentinelTemplateName": "Block-AADUser",
+                "hidden-SentinelTemplateVersion": "1.1",
+                "hidden-SentinelWorkspaceId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/microsoft.OperationalInsights/Workspaces/ccbcsentinelinstance"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Entities_-_Get_Accounts": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/account"
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                            "actions": {
+                                "Send_an_email-2": {
+                                    "runAfter": {
+                                        "HTTP": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "To": "aiqbal@ccbcmd.edu",
+                                            "Subject": "[Sentinel] - @{triggerBody()?['object']?['properties']?['title']}",
+                                            "Body": "<p class=\"editor-paragraph\">[Auto Email]<br><br><b><strong class=\"editor-text-bold\">Incident</strong></b>: @{triggerBody()?['object']?['properties']?['title']}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Account Name</strong></b>: @{body('Parse_JSON')?['accountName']}</p><p class=\"editor-paragraph\"><br><b><strong class=\"editor-text-bold\">UPN</strong></b>: @{body('Parse_JSON')?['additionalData']?['UserPrincipalName']}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Incident URL</strong></b>: @{triggerBody()?['object']?['properties']?['incidentUrl']}</p><br><p class=\"editor-paragraph\">Account is still listed as High Risk in Entra and the account has NOT been disabled. Check alert details for more information.</p>",
+                                            "Importance": "Normal"
+                                        },
+                                        "path": "/v2/Mail"
+                                    }
+                                },
+                                "Update_incident": {
+                                    "runAfter": {
+                                        "Send_an_email-2": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "put",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                                            "severity": "High",
+                                            "status": "Active"
+                                        },
+                                        "path": "/Incidents"
+                                    }
+                                },
+                                "HTTP": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "uri": "https://graph.microsoft.com/v1.0/users/@{body('Parse_JSON')?['additionalData']?['UserPrincipalName']}",
+                                        "method": "PATCH",
+                                        "headers": {
+                                            "Content-Type": "application/json"
+                                        },
+                                        "body": {
+                                            "accountEnabled": false
+                                        },
+                                        "authentication": {
+                                            "type": "ManagedServiceIdentity",
+                                            "audience": "https://graph.microsoft.com"
+                                        }
+                                    },
+                                    "runtimeConfiguration": {
+                                        "contentTransfer": {
+                                            "transferMode": "Chunked"
+                                        }
+                                    }
+                                },
+                                "Compose": {
+                                    "type": "Compose",
+                                    "inputs": "@items('For_each')"
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "Compose": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@items('For_each')",
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "accountName": {
+                                                    "type": "string"
+                                                },
+                                                "upnSuffix": {
+                                                    "type": "string"
+                                                },
+                                                "sid": {
+                                                    "type": "string"
+                                                },
+                                                "aadUserId": {
+                                                    "type": "string"
+                                                },
+                                                "isDomainJoined": {
+                                                    "type": "boolean"
+                                                },
+                                                "additionalData": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "UserPrincipalName": {
+                                                            "type": "string"
+                                                        },
+                                                        "AccountName": {
+                                                            "type": "string"
+                                                        },
+                                                        "DomainName": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "friendlyName": {
+                                                    "type": "string"
+                                                },
+                                                "Type": {
+                                                    "type": "string"
+                                                },
+                                                "Name": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Entities_-_Get_Accounts": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "microsoftsentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "[parameters('connections_microsoftsentinel_Block_EntraID_User_Incident_externalid')]",
+                                "connectionName": "[concat('microsoftsentinel-', parameters('workflows_Block_EntraID_User_Incident_name'))]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "office365-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "[parameters('connections_office365_3_externalid')]",
+                                "connectionName": "office365-3"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
