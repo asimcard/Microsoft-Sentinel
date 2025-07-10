@@ -1,1 +1,1 @@
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://raw.githubusercontent.com/asimcard/Sentinel/refs/heads/main/Playbooks/Block_EntraID_User_Alert/azuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fasimcard%2FSentinel%2Frefs%2Fheads%2Fmain%2FPlaybooks%2FBlock_EntraID_User_Alert%2Fazuredeploy.json)
