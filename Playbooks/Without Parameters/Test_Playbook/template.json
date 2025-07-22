@@ -1,0 +1,165 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "Test_Playbook",
+            "location": "eastus",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_variables": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Entity",
+                                        "type": "array",
+                                        "value": "@triggerBody()?['object']?['properties']?['relatedEntities']"
+                                    }
+                                ]
+                            }
+                        },
+                        "Filter_array": {
+                            "runAfter": {
+                                "Initialize_variables": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Query",
+                            "inputs": {
+                                "from": "@variables('Entity')",
+                                "where": "@equals(item()?['kind'],'Account')"
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Filter_array": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Filter_array')",
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "kind": {
+                                                "type": "string"
+                                            },
+                                            "properties": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "accountName": {
+                                                        "type": "string"
+                                                    },
+                                                    "upnSuffix": {
+                                                        "type": "string"
+                                                    },
+                                                    "sid": {
+                                                        "type": "string"
+                                                    },
+                                                    "aadUserId": {
+                                                        "type": "string"
+                                                    },
+                                                    "isDomainJoined": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "additionalData": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "UserPrincipalName": {
+                                                                "type": "string"
+                                                            },
+                                                            "AccountName": {
+                                                                "type": "string"
+                                                            },
+                                                            "DomainName": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "friendlyName": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "id",
+                                            "name",
+                                            "type",
+                                            "kind",
+                                            "properties"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuresentinel-Test_Playbook",
+                                "connectionName": "azuresentinel-Test_Playbook",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

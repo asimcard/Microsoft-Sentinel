@@ -1,0 +1,130 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "Send_basic_email",
+            "location": "eastus",
+            "tags": {
+                "hidden-SentinelTemplateName": "Send-basic-email",
+                "hidden-SentinelTemplateVersion": "1.0",
+                "LogicAppsCategory": "security"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Compose_Incident_link": {
+                            "runAfter": {
+                                "Create_HTML_table_with_Entities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Compose",
+                            "inputs": "<a href=\"@{triggerBody()?['object']?['properties']?['incidentUrl']}\">@{triggerBody()?['object']?['properties']?['incidentUrl']}</a>"
+                        },
+                        "Create_HTML_table_with_Entities": {
+                            "runAfter": {
+                                "Select_Entities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Table",
+                            "inputs": {
+                                "from": "@body('Select_Entities')",
+                                "format": "HTML"
+                            }
+                        },
+                        "Select_Entities": {
+                            "runAfter": {},
+                            "type": "Select",
+                            "inputs": {
+                                "from": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "select": {
+                                    "Entity": "@item()?['properties']?['friendlyName']",
+                                    "Entity Type": "@item()?['kind']"
+                                }
+                            }
+                        },
+                        "Send_an_email_with_Incident_details": {
+                            "runAfter": {
+                                "Compose_Incident_link": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "To": "securityengineering@ccbcmd.edu",
+                                    "Subject": "New Sentinel Incident - @{triggerBody()?['object']?['properties']?['title']}",
+                                    "Body": "<p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\" style=\"font-size: 16px;\">New incident created in Sentinel. Incident details:</strong></b><br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Incident title:</strong></b><br>@{triggerBody()?['object']?['properties']?['title']}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Creation time:</strong></b><br>@{triggerBody()?['object']?['properties']?['createdTimeUtc']}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Severity:</strong></b><br>@{triggerBody()?['object']?['properties']?['severity']}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Alert providers:</strong></b><br>@{join(triggerBody()?['object']?['properties']?['additionalData']?['alertProductNames'], '<br />')}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Tactics:</strong></b><br>@{join(triggerBody()?['object']?['properties']?['additionalData']?['tactics'], '<br />')}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Description:</strong></b><br>@{triggerBody()?['object']?['properties']?['description']}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Entities:</strong></b><br>@{body('Create_HTML_table_with_Entities')}<br><br><b><strong class=\"editor-text-bold\" style=\"font-size: 14px;\">Incident link:</strong></b><br>@{outputs('Compose_Incident_link')}</p><br>",
+                                    "Importance": "High"
+                                },
+                                "path": "/v2/Mail"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuresentinel-Send_basic_email",
+                                "connectionName": "azuresentinel-Send_basic_email",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "office365-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+                                "connectionName": "office365-3"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

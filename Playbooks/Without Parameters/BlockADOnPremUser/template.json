@@ -1,0 +1,311 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "BlockADOnPremUser",
+            "location": "eastus",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Entities_-_Get_Accounts": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/account"
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                            "actions": {
+                                "Condition": {
+                                    "actions": {
+                                        "Add_comment_to_incident_(V3)": {
+                                            "runAfter": {
+                                                "Send_an_email_(V2)": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "message": "<p class=\"editor-paragraph\">User Blocked on On-prem AD and Entra ID</p>"
+                                                },
+                                                "path": "/Incidents/Comment"
+                                            }
+                                        },
+                                        "Send_an_email_(V2)": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "To": "aiqbal@ccbcmd.edu",
+                                                    "Subject": "User:  @{body('Parse_JSON')?['Name']} Successfully Disabled",
+                                                    "Body": "<p>@{items('For_each')?['Name']} &nbsp;&nbsp;&nbsp;&nbsp;successfully disabled on Azure and On-Prem AD<br>\n</p>",
+                                                    "Importance": "High"
+                                                },
+                                                "path": "/v2/Mail"
+                                            }
+                                        },
+                                        "Update_incident": {
+                                            "runAfter": {
+                                                "Add_comment_to_incident_(V3)": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "status": "Closed",
+                                                    "classification": {
+                                                        "ClassificationAndReason": "TruePositive - SuspiciousActivity",
+                                                        "ClassificationReasonText": "Closed via Sentinel Playbook"
+                                                    }
+                                                },
+                                                "path": "/Incidents"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Create_job": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Send_an_email_(V2)_2": {
+                                                "type": "ApiConnection",
+                                                "inputs": {
+                                                    "host": {
+                                                        "connection": {
+                                                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                        }
+                                                    },
+                                                    "method": "post",
+                                                    "body": {
+                                                        "To": "aiqbal@ccbcmd.edu",
+                                                        "Subject": "Failed to disable @{body('Parse_JSON')?['Name']}",
+                                                        "Body": "<p>An error has occured while trying to disable user with SAM ID: &nbsp;<br>\n@{body('Parse_JSON')?['Name']}<br>\n<br>\nCheck the following details in the Runbook logs in the Azure Portal<br>\n@{body('Create_job')?['id']}</p>"
+                                                    },
+                                                    "path": "/v2/Mail"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "not": {
+                                                    "equals": [
+                                                        "@body('Create_job')?['properties']?['status']",
+                                                        "Failed"
+                                                    ]
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                },
+                                "Create_job": {
+                                    "runAfter": {
+                                        "Disable_Account_on_Azure_AD": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                                            }
+                                        },
+                                        "method": "put",
+                                        "body": {
+                                            "properties": {
+                                                "runOn": "Sentinel_Hybrid_Worker",
+                                                "parameters": {
+                                                    "SAMAccountName": "@body('Parse_JSON')?['additionalData']?['AccountName']"
+                                                }
+                                            }
+                                        },
+                                        "path": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Automation/automationAccounts/auto-sentinel/jobs",
+                                        "queries": {
+                                            "x-ms-api-version": "2015-10-31",
+                                            "runbookName": "Block-OnPremADUser",
+                                            "wait": true
+                                        }
+                                    }
+                                },
+                                "Disable_Account_on_Azure_AD": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuread-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "patch",
+                                        "body": {
+                                            "accountEnabled": true
+                                        },
+                                        "path": "/v1.0/users/@{encodeURIComponent(body('Parse_JSON')?['AadUserId'])}"
+                                    }
+                                },
+                                "Parse_JSON": {
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@items('For_each')",
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "accountName": {
+                                                    "type": "string"
+                                                },
+                                                "upnSuffix": {
+                                                    "type": "string"
+                                                },
+                                                "sid": {
+                                                    "type": "string"
+                                                },
+                                                "aadUserId": {
+                                                    "type": "string"
+                                                },
+                                                "isDomainJoined": {
+                                                    "type": "boolean"
+                                                },
+                                                "additionalData": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "UserPrincipalName": {
+                                                            "type": "string"
+                                                        },
+                                                        "AccountName": {
+                                                            "type": "string"
+                                                        },
+                                                        "DomainName": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "friendlyName": {
+                                                    "type": "string"
+                                                },
+                                                "Type": {
+                                                    "type": "string"
+                                                },
+                                                "Name": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Entities_-_Get_Accounts": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel-3": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/microsoftsentinel-Block-EntraIDUser-Incident",
+                                "connectionName": "microsoftsentinel-Block-EntraIDUser-Incident",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "office365-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+                                "connectionName": "office365-3"
+                            },
+                            "azureautomation": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azureautomation",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azureautomation-4",
+                                "connectionName": "azureautomation-4"
+                            },
+                            "azuread-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuread",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuread-1",
+                                "connectionName": "azuread-1"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

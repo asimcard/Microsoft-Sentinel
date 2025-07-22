@@ -1,0 +1,171 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "Block_EntraID_User_Alert",
+            "location": "eastus",
+            "tags": {
+                "LogicAppsCategory": "security",
+                "hidden-SentinelTemplateName": "Block-AADUser_alert",
+                "hidden-SentinelTemplateVersion": "1.1",
+                "hidden-SentinelWorkspaceId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/microsoft.OperationalInsights/Workspaces/ccbcsentinelinstance"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_alert": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/subscribe"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Entities_-_Get_Accounts": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['Entities']",
+                                "path": "/entities/account"
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                            "actions": {
+                                "Update_user_-_disable_user": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuread']['connectionId']"
+                                            }
+                                        },
+                                        "method": "patch",
+                                        "body": {
+                                            "accountEnabled": true
+                                        },
+                                        "path": "/v1.0/users/@{encodeURIComponent(item()?['AadUserId'])}"
+                                    }
+                                },
+                                "Send_an_email-2": {
+                                    "runAfter": {
+                                        "Update_user_-_disable_user": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "To": "aiqbal@ccbcmd.edu",
+                                            "Subject": "@triggerBody()?['AlertDisplayName']",
+                                            "Body": "<p class=\"editor-paragraph\">[Auto Email]<br><br><b><strong class=\"editor-text-bold\">Alert</strong></b>: @{triggerBody()?['AlertDisplayName']}<br><br><b><strong class=\"editor-text-bold\">Username (direct)</strong></b>: @{body('Entities_-_Get_Accounts')}<br><br><b><strong class=\"editor-text-bold\">Username (concat)</strong></b>: @{concat(items('For_each')?['Name'], '@', items('for_each')?['UPNSuffix'])}<br><br><b><strong class=\"editor-text-bold\">Entra User ID (in field)</strong></b>: @{item()?['AadUserId']}</p><br><p class=\"editor-paragraph\">Account *not* disabled (in test mode). Should have been disabled if enabled.</p>",
+                                            "Importance": "Normal"
+                                        },
+                                        "path": "/v2/Mail"
+                                    }
+                                },
+                                "Send_an_email-1": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "To": "aiqbal@ccbcmd.edu",
+                                            "Subject": "@{triggerBody()?['AlertDisplayName']} ",
+                                            "Body": "<p class=\"editor-paragraph\">[Auto Email]</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Alert: </strong></b>@{triggerBody()?['AlertDisplayName']}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Username (direct): </strong></b>@{body('Entities_-_Get_Accounts')}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Username (concat): </strong></b>@{concat(items('For_each')?['Name'], '@', items('for_each')?['UPNSuffix'])}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Entra User ID (in field): </strong></b>@{item()?['AadUserId']}</p><br>",
+                                            "Importance": "Normal"
+                                        },
+                                        "path": "/v2/Mail"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Entities_-_Get_Accounts": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuresentinel-TestPlayBook",
+                                "connectionName": "azuresentinel-TestPlayBook",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "microsoftsentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/microsoftsentinel-Block_EntraID_User_Alert",
+                                "connectionName": "microsoftsentinel-Block_EntraID_User_Alert",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "azuread": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuread",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuread-1",
+                                "connectionName": "azuread-1"
+                            },
+                            "office365-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+                                "connectionName": "office365-3"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

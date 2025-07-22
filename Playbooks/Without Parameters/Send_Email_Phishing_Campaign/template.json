@@ -1,0 +1,92 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "Send_Email_Phishing_Campaign",
+            "location": "eastus",
+            "tags": {
+                "LogicAppsCategory": "security"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Send_an_email_(V2)": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "To": "aiqbal@ccbcmd.edu",
+                                    "Subject": "Possible Phishing Campaign (TEST)",
+                                    "Body": "<p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Time Generated (UTC): </strong></b>@{triggerBody()?['object']?['properties']?['createdTimeUtc']}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Incident Display Name: </strong></b>@{triggerBody()?['object']?['properties']?['title']}</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">URL</strong></b>: @{triggerBody()?['object']?['properties']?['incidentUrl']}</p>",
+                                    "Importance": "Normal"
+                                },
+                                "path": "/v2/Mail"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuresentinel-TestPlayBook",
+                                "connectionName": "azuresentinel-TestPlayBook",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "office365-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+                                "connectionName": "office365-3"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

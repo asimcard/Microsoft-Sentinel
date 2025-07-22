@@ -1,0 +1,443 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "PhishingDeleteImproved",
+            "location": "eastus",
+            "tags": {
+                "hidden-SentinelTemplateName": "PhishingDeleteImproved",
+                "hidden-SentinelTemplateVersion": "1.0"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "EmailDomainName": {
+                            "defaultValue": "ccbcmd.edu",
+                            "type": "String"
+                        },
+                        "ResourceGroupName": {
+                            "defaultValue": "CCBCSentinelResourceGroup",
+                            "type": "String"
+                        },
+                        "SubscriptionId": {
+                            "defaultValue": "291b0d60-693e-467b-8ded-df99775b753d",
+                            "type": "String"
+                        },
+                        "WorkspaceName": {
+                            "defaultValue": "ccbcsentinelinstance",
+                            "type": "String"
+                        },
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Entities_-_Get_Accounts": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/account"
+                            }
+                        },
+                        "ForEachSender": {
+                            "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                            "actions": {
+                                "ForEachResult": {
+                                    "foreach": "@body('ParseKQLQuery')",
+                                    "actions": {
+                                        "Condition": {
+                                            "actions": {
+                                                "HTTP_2": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "uri": "https://graph.microsoft.com/v1.0/users/@{items('ForEachResult')['RecipientEmailAddress']}/messages/@{body('ParseGetId')?['value'][0]?['id']}",
+                                                        "method": "DELETE",
+                                                        "authentication": {
+                                                            "audience": "https://graph.microsoft.com",
+                                                            "type": "ManagedServiceIdentity"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "ParseGetId": [
+                                                    "Succeeded",
+                                                    "Failed"
+                                                ]
+                                            },
+                                            "else": {
+                                                "actions": {}
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "not": {
+                                                            "equals": [
+                                                                "@body('ParseGetId')?['value'][0]?['id']",
+                                                                "@null"
+                                                            ]
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            "type": "If"
+                                        },
+                                        "GetId": {
+                                            "type": "Http",
+                                            "inputs": {
+                                                "uri": "https://graph.microsoft.com/v1.0/users/@{items('ForEachResult')['RecipientEmailAddress']}/messages?$filter=internetMessageId eq '@{items('ForEachResult')['InternetMessageId']}'",
+                                                "method": "GET",
+                                                "authentication": {
+                                                    "audience": "https://graph.microsoft.com",
+                                                    "type": "ManagedServiceIdentity"
+                                                }
+                                            }
+                                        },
+                                        "ParseGetId": {
+                                            "runAfter": {
+                                                "GetId": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@body('GetId')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "@@odata.context": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "items": {
+                                                                "properties": {
+                                                                    "@@odata.etag": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "bccRecipients": {
+                                                                        "type": "array"
+                                                                    },
+                                                                    "body": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "contentType": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "bodyPreview": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "categories": {
+                                                                        "type": "array"
+                                                                    },
+                                                                    "ccRecipients": {
+                                                                        "type": "array"
+                                                                    },
+                                                                    "changeKey": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "conversationId": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "conversationIndex": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "createdDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "flag": {
+                                                                        "properties": {
+                                                                            "flagStatus": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "from": {
+                                                                        "properties": {
+                                                                            "emailAddress": {
+                                                                                "properties": {
+                                                                                    "address": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "name": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                },
+                                                                                "type": "object"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "hasAttachments": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "importance": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "inferenceClassification": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "internetMessageId": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "isDeliveryReceiptRequested": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "isDraft": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "isRead": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "isReadReceiptRequested": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "lastModifiedDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "parentFolderId": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "receivedDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "replyTo": {
+                                                                        "type": "array"
+                                                                    },
+                                                                    "sender": {
+                                                                        "properties": {
+                                                                            "emailAddress": {
+                                                                                "properties": {
+                                                                                    "address": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "name": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                },
+                                                                                "type": "object"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "sentDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "subject": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "toRecipients": {
+                                                                        "items": {
+                                                                            "properties": {
+                                                                                "emailAddress": {
+                                                                                    "properties": {
+                                                                                        "address": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "name": {
+                                                                                            "type": "string"
+                                                                                        }
+                                                                                    },
+                                                                                    "type": "object"
+                                                                                }
+                                                                            },
+                                                                            "required": [
+                                                                                "emailAddress"
+                                                                            ],
+                                                                            "type": "object"
+                                                                        },
+                                                                        "type": "array"
+                                                                    },
+                                                                    "webLink": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "@@odata.etag",
+                                                                    "id",
+                                                                    "createdDateTime",
+                                                                    "lastModifiedDateTime",
+                                                                    "changeKey",
+                                                                    "categories",
+                                                                    "receivedDateTime",
+                                                                    "sentDateTime",
+                                                                    "hasAttachments",
+                                                                    "internetMessageId",
+                                                                    "subject",
+                                                                    "bodyPreview",
+                                                                    "importance",
+                                                                    "parentFolderId",
+                                                                    "conversationId",
+                                                                    "conversationIndex",
+                                                                    "isDeliveryReceiptRequested",
+                                                                    "isReadReceiptRequested",
+                                                                    "isRead",
+                                                                    "isDraft",
+                                                                    "webLink",
+                                                                    "inferenceClassification",
+                                                                    "body",
+                                                                    "sender",
+                                                                    "from",
+                                                                    "toRecipients",
+                                                                    "ccRecipients",
+                                                                    "bccRecipients",
+                                                                    "replyTo",
+                                                                    "flag"
+                                                                ],
+                                                                "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "ParseKQLQuery": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Foreach"
+                                },
+                                "ParseKQLQuery": {
+                                    "runAfter": {
+                                        "Run_query_and_list_results": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Run_query_and_list_results')?['value']",
+                                        "schema": {
+                                            "items": {
+                                                "properties": {
+                                                    "InternetMessageId": {
+                                                        "type": "string"
+                                                    },
+                                                    "NetworkMessageId": {
+                                                        "type": "string"
+                                                    },
+                                                    "RecipientEmailAddress": {
+                                                        "type": "string"
+                                                    },
+                                                    "Subject": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "RecipientEmailAddress",
+                                                    "NetworkMessageId",
+                                                    "Subject",
+                                                    "InternetMessageId"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        }
+                                    }
+                                },
+                                "Run_query_and_list_results": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuremonitorlogs-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": "let PhishCount = EmailEvents\n| where TimeGenerated > ago(2h)\n| where SenderFromAddress has \"@{items('ForEachSender')?['Name']}\"\n| where RecipientEmailAddress has \"@{parameters('EmailDomainName')}\"\n| summarize EmailCount = count() by Subject, SenderFromAddress\n| where EmailCount > 100\n| project Subject;\nEmailEvents\n| where TimeGenerated > ago(2h)\n| where SenderFromAddress has \"@{items('ForEachSender')?['Name']}\"\n| where RecipientEmailAddress has \"@{parameters('EmailDomainName')}\"\n| where Subject in (PhishCount)\n| project RecipientEmailAddress, NetworkMessageId, Subject, InternetMessageId",
+                                        "path": "/queryData",
+                                        "queries": {
+                                            "subscriptions": "@parameters('SubscriptionId')",
+                                            "resourcegroups": "@parameters('ResourceGroupName')",
+                                            "resourcetype": "Log Analytics Workspace",
+                                            "resourcename": "@parameters('WorkspaceName')",
+                                            "timerange": "2h"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Entities_-_Get_Accounts": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/Azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/MicrosoftSentinel-PhishingDeleteImproved",
+                                "connectionName": "MicrosoftSentinel-PhishingDeleteImproved",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "azuremonitorlogs-1": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuremonitorlogs",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuremonitorlogs-1",
+                                "connectionName": "azuremonitorlogs-1",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,256 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "Unisolate_Machine_Playbook",
+            "location": "eastus",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "For_each": {
+                            "foreach": "@body('Parse_JSON')",
+                            "actions": {
+                                "Send_an_email_(V2)-2-copy": {
+                                    "runAfter": {
+                                        "Actions_-_Unisolate_machine": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "To": "aiqbal@ccbcmd.edu",
+                                            "Subject": "[Sentinel Playbook] - Endpoint Unisolated",
+                                            "Body": "<p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">Endpoint</strong></b>: @{item()?['properties']?['hostName']} has been unisolated.</p><br><p class=\"editor-paragraph\"><b><strong class=\"editor-text-bold\">User</strong></b>: @{item()?['properties']?['additionalData']?['LoggedOnUsers']}<br><br><b><strong class=\"editor-text-bold\">Incident URL</strong></b>: @{triggerBody()?['object']?['properties']?['incidentUrl']}<br></p><br>",
+                                            "Importance": "High"
+                                        },
+                                        "path": "/v2/Mail"
+                                    }
+                                },
+                                "Actions_-_Unisolate_machine": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "Comment": "Isolated by Sentinel Playbook"
+                                        },
+                                        "path": "/api/machines/@{encodeURIComponent(item()?['properties']?['additionalData']?['MdatpDeviceId'])}/unisolate"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Initialize_variables": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Hosts",
+                                        "type": "array",
+                                        "value": "@triggerBody()?['object']?['properties']?['relatedEntities']"
+                                    }
+                                ]
+                            }
+                        },
+                        "Filter_array": {
+                            "runAfter": {
+                                "Initialize_variables": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Query",
+                            "inputs": {
+                                "from": "@variables('Hosts')",
+                                "where": "@equals(item()?['kind'],'Host')"
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Filter_array": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Filter_array')",
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "kind": {
+                                                "type": "string"
+                                            },
+                                            "properties": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "dnsDomain": {
+                                                        "type": "string"
+                                                    },
+                                                    "hostName": {
+                                                        "type": "string"
+                                                    },
+                                                    "osFamily": {
+                                                        "type": "string"
+                                                    },
+                                                    "osVersion": {
+                                                        "type": "string"
+                                                    },
+                                                    "additionalData": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "LastIpAddress": {
+                                                                "type": "string"
+                                                            },
+                                                            "LastExternalIpAddress": {
+                                                                "type": "string"
+                                                            },
+                                                            "FQDN": {
+                                                                "type": "string"
+                                                            },
+                                                            "AvStatus": {
+                                                                "type": "string"
+                                                            },
+                                                            "LoggedOnUsers": {
+                                                                "type": "string"
+                                                            },
+                                                            "MdatpDeviceId": {
+                                                                "type": "string"
+                                                            },
+                                                            "RiskScore": {
+                                                                "type": "string"
+                                                            },
+                                                            "HealthStatus": {
+                                                                "type": "string"
+                                                            },
+                                                            "OsBuild": {
+                                                                "type": "string"
+                                                            },
+                                                            "FirstSeenDateTime": {
+                                                                "type": "string"
+                                                            },
+                                                            "RbacGroupName": {
+                                                                "type": "string"
+                                                            },
+                                                            "OnboardingStatus": {
+                                                                "type": "string"
+                                                            },
+                                                            "AadDeviceId": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "friendlyName": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "id",
+                                            "name",
+                                            "type",
+                                            "kind",
+                                            "properties"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/azuresentinel",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/azuresentinel-Unisolate_Machine_Playbook",
+                                "connectionName": "azuresentinel-Unisolate_Machine_Playbook",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "office365": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/office365-3",
+                                "connectionName": "office365-3"
+                            },
+                            "wdatp": {
+                                "id": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/providers/Microsoft.Web/locations/eastus/managedApis/wdatp",
+                                "connectionId": "/subscriptions/291b0d60-693e-467b-8ded-df99775b753d/resourceGroups/CCBCSentinelResourceGroup/providers/Microsoft.Web/connections/wdatp-Isolate_Machine_Playbook",
+                                "connectionName": "wdatp-Isolate_Machine_Playbook",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
