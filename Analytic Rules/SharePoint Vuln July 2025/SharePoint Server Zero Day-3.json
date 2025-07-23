@@ -1,0 +1,115 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/e4c27f26-228f-4d83-8396-d3924a4f58e7')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/e4c27f26-228f-4d83-8396-d3924a4f58e7')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "NRT",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "SharePoint Server Zero Day-3",
+                "description": "",
+                "severity": "High",
+                "enabled": true,
+                "query": "DeviceFileEvents\r\n| where TimeGenerated > ago(1d)\r\n| where FolderPath has_any (@'microsoft shared\\Web Server Extensions\\16\\TEMPLATE\\LAYOUTS', @'microsoft shared\\Web Server Extensions\\15\\TEMPLATE\\LAYOUTS')\r\n| where FileName has \"spinstall0\"",
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "tactics": [
+                    "InitialAccess"
+                ],
+                "techniques": [],
+                "subTechniques": [],
+                "alertRuleTemplateName": null,
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": false,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "PT5H",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": [],
+                        "groupByCustomDetails": []
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": null,
+                "customDetails": null,
+                "entityMappings": [
+                    {
+                        "entityType": "File",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Directory",
+                                "columnName": "FolderPath"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "FileName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Host",
+                        "fieldMappings": [
+                            {
+                                "identifier": "FullName",
+                                "columnName": "DeviceName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Sid",
+                                "columnName": "InitiatingProcessAccountSid"
+                            },
+                            {
+                                "identifier": "AadUserId",
+                                "columnName": "InitiatingProcessAccountObjectId"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Sid",
+                                "columnName": "RequestAccountSid"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "RequestAccountName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Process",
+                        "fieldMappings": [
+                            {
+                                "identifier": "ProcessId",
+                                "columnName": "InitiatingProcessId"
+                            },
+                            {
+                                "identifier": "CreationTimeUtc",
+                                "columnName": "InitiatingProcessCreationTime"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}

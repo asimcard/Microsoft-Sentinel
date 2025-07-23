@@ -1,0 +1,121 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/b2275a63-b886-4a54-8827-b09528c54da5')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/b2275a63-b886-4a54-8827-b09528c54da5')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "NRT",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "SharePoint Server Zero Day-2",
+                "description": "",
+                "severity": "High",
+                "enabled": true,
+                "query": "DeviceProcessEvents\r\n| where TimeGenerated > ago(1d)\r\n| where InitiatingProcessFileName has \"w3wp.exe\"\r\n and InitiatingProcessCommandLine !has \"DefaultAppPool\"\r\n and FileName =~ \"cmd.exe\"\r\n and ProcessCommandLine has_all (\"cmd.exe\", \"powershell\")\r\n and ProcessCommandLine has_any (\"EncodedCommand\", \"-ec\")\r\n| extend CommandArguments = split(ProcessCommandLine, \" \")\r\n| mv-expand CommandArguments to typeof(string)\r\n| where CommandArguments matches regex \"^[A-Za-z0-9+/=]{15,}$\"\r\n| extend B64Decode = replace(\"\\\\x00\", \"\", base64_decodestring(tostring(CommandArguments)))  \r\n| where B64Decode has_any (\"spinstall0\", @'C:\\PROGRA~1\\COMMON~1\\MICROS~1\\WEBSER~1\\15\\TEMPLATE\\LAYOUTS', @'C:\\PROGRA~1\\COMMON~1\\MICROS~1\\WEBSER~1\\16\\TEMPLATE\\LAYOUTS')\r\n",
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "tactics": [
+                    "InitialAccess"
+                ],
+                "techniques": [
+                    "T0822"
+                ],
+                "subTechniques": [],
+                "alertRuleTemplateName": null,
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": false,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "PT5H",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": [],
+                        "groupByCustomDetails": []
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": null,
+                "customDetails": null,
+                "entityMappings": [
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Sid",
+                                "columnName": "AccountSid"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "AccountName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Process",
+                        "fieldMappings": [
+                            {
+                                "identifier": "ProcessId",
+                                "columnName": "InitiatingProcessId"
+                            },
+                            {
+                                "identifier": "CreationTimeUtc",
+                                "columnName": "InitiatingProcessCreationTime"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Sid",
+                                "columnName": "InitiatingProcessAccountSid"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "InitiatingProcessAccountName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "File",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Directory",
+                                "columnName": "FolderPath"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "FileName"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "File",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Directory",
+                                "columnName": "InitiatingProcessFolderPath"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "InitiatingProcessFileName"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}
