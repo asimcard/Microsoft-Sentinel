@@ -1,0 +1,16 @@
+MicrosoftPurviewInformationProtection
+| where TimeGenerated > ago(180d)
+| where Operation contains "Discover" or Operation contains "LabelApplied" // Applying the label action or discovering a file with said label
+| extend LabelCategory = case( //Input the labels ID and name below
+                             SensitivityLabelId == "xyz",
+                             "Restricted",
+                             SensitivityLabelId == "xyz",
+                             "Sensitive",
+                             SensitivityLabelId == "xyz",
+                             "Internal",
+                             SensitivityLabelId == "xyz",
+                             "Public",
+                             "Unlabeled"
+                         )
+| summarize Value = count() by LabelCategory
+| order by Value
