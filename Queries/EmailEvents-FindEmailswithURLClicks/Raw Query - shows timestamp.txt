@@ -1,0 +1,19 @@
+// When a malicious email is received, list all the users who received it and all the users who clicked a URL in the email, including which URLs were clicked
+// Summarized view: who received the email, who clicked, what URLs, and when clicks occurred
+
+EmailEvents
+| where EmailDirection == "Inbound"
+| where Subject == "Malicious Subject Name" or SenderFromAddress == "malicioususer@domain.com"
+| project RecipientEmailAddress, Subject, NetworkMessageId, SenderFromAddress
+| join kind=inner (
+    UrlClickEvents
+    | project Clicker = AccountUpn, NetworkMessageId, Url, ClickTimestamp = Timestamp
+) on NetworkMessageId
+| summarize
+    ['Recipient Count'] = dcount(RecipientEmailAddress),
+    ['Users Who Received Email'] = make_set(RecipientEmailAddress),
+    ['Clicker Count'] = dcount(Clicker),
+    ['Users Who Clicked URL'] = make_set(Clicker),
+    ['URLs Clicked'] = make_set(Url),
+    ['Click Timestamps'] = make_set(ClickTimestamp)
+    by SenderFromAddress, Subject, NetworkMessageId
