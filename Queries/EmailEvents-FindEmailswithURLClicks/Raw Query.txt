@@ -1,7 +1,4 @@
-// When a malicious email is received, list all the users who received it and all the users who clicked a URL in the email
-
-// Data connector required for this query - M365 Defender - Email* tables
-// Data connector required for this query - UrlClickEvents
+// When a malicious email is received, list all the users who received it and all the users who clicked a URL in the email, including which URLs were clicked
 
 EmailEvents
 | where EmailDirection == "Inbound"
@@ -9,11 +6,12 @@ EmailEvents
 | project RecipientEmailAddress, Subject, NetworkMessageId, SenderFromAddress
 | join kind=inner (
     UrlClickEvents
-    | project Clicker = AccountUpn, NetworkMessageId
+    | project Clicker = AccountUpn, NetworkMessageId, Url
 ) on NetworkMessageId
 | summarize
     ['Recipient Count'] = dcount(RecipientEmailAddress),
     ['Users Who Received Email'] = make_set(RecipientEmailAddress),
     ['Clicker Count'] = dcount(Clicker),
-    ['Users Who Clicked URL'] = make_set(Clicker)
+    ['Users Who Clicked URL'] = make_set(Clicker),
+    ['URLs Clicked'] = make_set(Url)
     by SenderFromAddress, Subject, NetworkMessageId
