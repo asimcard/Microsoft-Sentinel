@@ -7,7 +7,7 @@ EmailEvents
 | project RecipientEmailAddress, Subject, NetworkMessageId, SenderFromAddress
 | join kind=inner (
     UrlClickEvents
-    | project Clicker = AccountUpn, NetworkMessageId, Url, ClickTimestamp = Timestamp
+    | project Clicker = AccountUpn, NetworkMessageId, Url, ClickTimestamp = TimeGenerated
 ) on NetworkMessageId
 | summarize
     ['Recipient Count'] = dcount(RecipientEmailAddress),
