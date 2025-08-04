@@ -5,7 +5,7 @@
 
 EmailEvents
 | where EmailDirection == "Inbound"
-| where Subject == "Malicious Subject Name" or SenderFromAddress == "email@email.com"
+| where Subject == "Malicious Subject Name" or SenderFromAddress == "malicioususer@domain.com"
 | project RecipientEmailAddress, Subject, NetworkMessageId, SenderFromAddress
 | join kind=inner (
     UrlClickEvents
