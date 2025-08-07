@@ -1,0 +1,6 @@
+CloudAppEvents 
+| where RawEventData.Operation contains "SharingSet" //any changes to the sharing settings, very broad
+| where RawEventData.SensitivityLabelId ==  "LabelID"
+| extend AccountName = substring(RawEventData.UserId, 0, indexof(RawEventData.UserId, "@"))
+| extend UPNSuffix = substring(RawEventData.UserId, indexof(RawEventData.UserId, "@") + 1)
+| project TimeGenerated, AadUserId=AccountId, AccountDisplayName, AccountUPN=RawEventData.UserId, AccountName, UPNSuffix, FileName=RawEventData.SourceFileName, FilePath=RawEventData.ObjectId, IPAddress, AppName=Application, SaasId=ApplicationId, FileURL=RawEventData.ObjectId

@@ -1,0 +1,8 @@
+CloudAppEvents 
+//| where RawEventData.UserId contains "Email@yahoo.com"
+| where RawEventData.Operation contains "SharingSet"
+    //or RawEventData.Operation contains "SecureLinkCreated"
+    //or RawEventData.Operation contains "SharingSet"
+    //or RawEventData.Operation contains "LinkCreated"
+    //or RawEventData.Operation contains "AnonymousLinkCreated"
+//| where RawEventData.Workload contains "OneDrive"
