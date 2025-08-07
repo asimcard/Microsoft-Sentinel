@@ -1,0 +1,124 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/03215cd5-dfc3-448e-aa58-6266ea58e8ec')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/03215cd5-dfc3-448e-aa58-6266ea58e8ec')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "Scheduled",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "Shared - Restricted Labeled File",
+                "description": "Fires off when a restricted labeled file has been shared or has its sharing permissions edited.",
+                "severity": "Medium",
+                "enabled": true,
+                "query": "CloudAppEvents \r\n| where RawEventData.Operation contains \"SharingSet\" //any changes to the sharing settings, very broad\r\n| where RawEventData.SensitivityLabelId ==  \"3090a644-acca-4358-a5c6-7382580e82d5\"\r\n| extend AccountName = substring(RawEventData.UserId, 0, indexof(RawEventData.UserId, \"@\"))\r\n| extend UPNSuffix = substring(RawEventData.UserId, indexof(RawEventData.UserId, \"@\") + 1)\r\n| project TimeGenerated, AadUserId=AccountId, AccountDisplayName, AccountUPN=RawEventData.UserId, AccountName, UPNSuffix, FileName=RawEventData.SourceFileName, FilePath=RawEventData.ObjectId, IPAddress, AppName=Application, SaasId=ApplicationId, FileURL=RawEventData.ObjectId",
+                "queryFrequency": "PT5H",
+                "queryPeriod": "PT5H",
+                "triggerOperator": "GreaterThan",
+                "triggerThreshold": 0,
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "startTimeUtc": null,
+                "tactics": [
+                    "Exfiltration"
+                ],
+                "techniques": [
+                    "T1567"
+                ],
+                "subTechniques": [
+                    "T1567.002"
+                ],
+                "alertRuleTemplateName": null,
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": false,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "PT5H",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": [],
+                        "groupByCustomDetails": []
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": null,
+                "customDetails": null,
+                "entityMappings": [
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "AadUserId",
+                                "columnName": "AadUserId"
+                            },
+                            {
+                                "identifier": "Name",
+                                "columnName": "AccountName"
+                            },
+                            {
+                                "identifier": "UPNSuffix",
+                                "columnName": "UPNSuffix"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "IP",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Address",
+                                "columnName": "IPAddress"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "URL",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Url",
+                                "columnName": "FileURL"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "CloudApplication",
+                        "fieldMappings": [
+                            {
+                                "identifier": "SaasId",
+                                "columnName": "SaasId"
+                            },
+                            {
+                                "identifier": "AppId",
+                                "columnName": "SaasId"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "File",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Name",
+                                "columnName": "FileName"
+                            },
+                            {
+                                "identifier": "Directory",
+                                "columnName": "FilePath"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}
